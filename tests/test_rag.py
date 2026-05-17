@@ -70,6 +70,7 @@ class TestRagInit:
             patch("rag.FAISS.from_documents", return_value=MagicMock()),
             patch("rag.FAISS.load_local", side_effect=Exception("no index")),
             patch("os.makedirs"),
+            patch("rag.RAGPipeline._load_pdfs", return_value=[]) # Mock PDF load to test seed docs only
         ):
             from rag import RAGPipeline
             pipeline = RAGPipeline.__new__(RAGPipeline)
@@ -86,6 +87,7 @@ class TestRagInit:
             patch("rag.FAISS.from_documents", return_value=MagicMock()),
             patch("rag.FAISS.load_local", side_effect=Exception("no index")),
             patch("os.makedirs"),
+            patch("rag.RAGPipeline._load_pdfs", return_value=[])
         ):
             from rag import RAGPipeline
             pipeline = RAGPipeline.__new__(RAGPipeline)
@@ -102,6 +104,7 @@ class TestRagInit:
             patch("rag.FAISS.from_documents", return_value=MagicMock()),
             patch("rag.FAISS.load_local", side_effect=Exception("no index")),
             patch("os.makedirs"),
+            patch("rag.RAGPipeline._load_pdfs", return_value=[])
         ):
             from rag import RAGPipeline
             pipeline = RAGPipeline.__new__(RAGPipeline)
