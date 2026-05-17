@@ -144,6 +144,16 @@ def get_analytics():
     return prediction_engine.get_analytics()
 
 
+@app.get("/model/metrics")
+def get_model_metrics():
+    if not prediction_engine:
+        raise HTTPException(status_code=500, detail="Engine not ready")
+    metrics = prediction_engine.get_model_metrics()
+    if metrics is None:
+        raise HTTPException(status_code=503, detail="Model metrics unavailable — model or dataset not loaded")
+    return metrics
+
+
 @app.post("/rag/query")
 def rag_query(req: RAGRequest, db: Session = Depends(get_db)):
     if not rag_pipeline:

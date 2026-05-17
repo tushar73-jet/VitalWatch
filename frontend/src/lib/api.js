@@ -41,3 +41,8 @@ export const getRagSuggestions = async () => {
     const res = await api.get('/rag/suggestions');
     return res.data;
 };
+
+export const getModelMetrics = async () => {
+    const res = await api.get('/model/metrics');
+    return res.data;
+};

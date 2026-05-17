@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import shap
 import logging
+from sklearn.metrics import roc_curve, auc, confusion_matrix, precision_recall_fscore_support
 
 class PredictionEngine:
     def __init__(self):
@@ -183,3 +184,92 @@ class PredictionEngine:
                 "per_case": [], "map_distribution": {"bins": [], "counts": []},
                 "risk_distribution": {"bins": [], "counts": []}
             }
+
+    def get_model_metrics(self):
+        """Compute real model evaluation metrics from the test dataset."""
+        if self.df.empty or not self.model or not self.scaler or not self.feature_cols:
+            return None
+
+        try:
+            ioh_col = 'IOH' if 'IOH' in self.df.columns else ('ioh' if 'ioh' in self.df.columns else None)
+            if not ioh_col or not all(col in self.df.columns for col in self.feature_cols):
+                logging.warning("get_model_metrics: missing IOH label or feature columns in dataset")
+                return None
+
+            X = self.df[self.feature_cols].values
+            y_true = self.df[ioh_col].astype(int).values
+
+            X_scaled = self.scaler.transform(X)
+            y_prob = self.model.predict_proba(X_scaled)[:, 1]
+
+            # --- ROC Curve (subsample to 100 points for JSON size) ---
+            fpr_arr, tpr_arr, roc_thresholds = roc_curve(y_true, y_prob)
+            auc_roc = float(auc(fpr_arr, tpr_arr))
+
+            # Downsample to ~100 evenly-spaced points
+            idx = np.round(np.linspace(0, len(fpr_arr) - 1, 100)).astype(int)
+            roc_data = [
+                {"fpr": round(float(fpr_arr[i]) * 100, 2), "tpr": round(float(tpr_arr[i]) * 100, 2)}
+                for i in idx
+            ]
+
+            # --- Threshold Sensitivity (precision / recall / f1 at each threshold step) ---
+            thresholds = np.arange(0.05, 0.96, 0.05)
+            sensitivity_data = []
+            for t in thresholds:
+                y_pred_t = (y_prob >= t).astype(int)
+                p, r, f1, _ = precision_recall_fscore_support(
+                    y_true, y_pred_t, average='binary', zero_division=0
+                )
+                sensitivity_data.append({
+                    "threshold": round(float(t), 2),
+                    "precision": round(float(p), 4),
+                    "recall": round(float(r), 4),
+                    "f1": round(float(f1), 4),
+                })
+
+            # --- Confusion matrix at default threshold = 0.5 ---
+            def conf_at(t):
+                y_pred = (y_prob >= t).astype(int)
+                cm = confusion_matrix(y_true, y_pred)
+                tn, fp, fn, tp = cm.ravel()
+                p, r, f1, _ = precision_recall_fscore_support(
+                    y_true, y_pred, average='binary', zero_division=0
+                )
+                return {
+                    "tn": int(tn), "fp": int(fp),
+                    "fn": int(fn), "tp": int(tp),
+                    "precision": round(float(p), 4),
+                    "recall": round(float(r), 4),
+                    "f1": round(float(f1), 4),
+                }
+
+            default_conf = conf_at(0.5)
+
+            # --- Feature Importance from model coefficients ---
+            coefs = np.abs(self.model.coef_[0])
+            coef_sum = coefs.sum()
+            feature_importance = sorted(
+                [
+                    {"name": col, "importance": round(float(coefs[i] / coef_sum), 4)}
+                    for i, col in enumerate(self.feature_cols)
+                ],
+                key=lambda x: x["importance"],
+                reverse=True,
+            )[:15]
+
+            return {
+                "auc_roc": round(auc_roc, 4),
+                "roc_curve": roc_data,
+                "default_threshold": 0.5,
+                "confusion_matrix": default_conf,
+                "sensitivity": sensitivity_data,
+                "feature_importance": feature_importance,
+                "total_rows": len(y_true),
+                "ioh_rate": round(float(y_true.mean()), 4),
+            }
+
+        except Exception as e:
+            logging.error(f"Error computing model metrics: {e}")
+            return None
+
