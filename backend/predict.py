@@ -7,6 +7,9 @@ import logging
 from sklearn.metrics import roc_curve, auc, confusion_matrix, precision_recall_fscore_support
 
 class PredictionEngine:
+    # Candidate column names for the IOH label, in priority order
+    _IOH_CANDIDATES = ('IOH', 'ioh', 'ioh_label_1m', 'ioh_label')
+
     def __init__(self):
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
@@ -134,7 +137,7 @@ class PredictionEngine:
             case_col = 'case_id' if 'case_id' in self.df.columns else self.df.columns[0]
             total_cases = int(self.df[case_col].nunique())
             
-            ioh_col = 'IOH' if 'IOH' in self.df.columns else ('ioh' if 'ioh' in self.df.columns else None)
+            ioh_col = next((c for c in self._IOH_CANDIDATES if c in self.df.columns), None)
             overall_ioh_rate = float(self.df[ioh_col].mean()) if ioh_col else 0.0
             
             if self.model and self.scaler and self.feature_cols and all(col in self.df.columns for col in self.feature_cols):
@@ -191,7 +194,7 @@ class PredictionEngine:
             return None
 
         try:
-            ioh_col = 'IOH' if 'IOH' in self.df.columns else ('ioh' if 'ioh' in self.df.columns else None)
+            ioh_col = next((c for c in self._IOH_CANDIDATES if c in self.df.columns), None)
             if not ioh_col or not all(col in self.df.columns for col in self.feature_cols):
                 logging.warning("get_model_metrics: missing IOH label or feature columns in dataset")
                 return None
