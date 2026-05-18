@@ -31,31 +31,34 @@ load_dotenv()
 
 prediction_engine = None
 rag_pipeline = None
-db_available = False
-
-
-def load_ml_models_sync():
-    global prediction_engine, rag_pipeline
-    
-    # 1. Load Prediction Engine
-    try:
-        # Runs synchronously in a background thread
-        prediction_engine = PredictionEngine()
-        logging.info("✅ Prediction engine loaded (Background Thread)")
-    except Exception as e:
-        logging.error(f"❌ PredictionEngine failed: {e}")
-
-    # 2. Load RAG Pipeline (SentenceTransformers + FAISS)
-    groq_key = os.environ.get("GROQ_API_KEY", "")
-    if groq_key and groq_key not in ("your_key_here", ""):
+def get_lazy_prediction_engine():
+    global prediction_engine
+    if prediction_engine is None:
+        logging.info("Lazy loading PredictionEngine...")
         try:
-            # Runs synchronously in a background thread
-            rag_pipeline = RAGPipeline(groq_api_key=groq_key)
-            logging.info("✅ RAG pipeline ready (Background Thread)")
+            prediction_engine = PredictionEngine()
+            logging.info("✅ Prediction engine loaded (Lazy)")
         except Exception as e:
-            logging.error(f"❌ RAGPipeline failed: {e}")
-    else:
-        logging.warning("⚠️  No GROQ_API_KEY — RAG chatbot disabled")
+            logging.error(f"❌ PredictionEngine failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to initialize PredictionEngine: {e}")
+    return prediction_engine
+
+def get_lazy_rag_pipeline():
+    global rag_pipeline
+    if rag_pipeline is None:
+        logging.info("Lazy loading RAGPipeline...")
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+        if groq_key and groq_key not in ("your_key_here", ""):
+            try:
+                rag_pipeline = RAGPipeline(groq_api_key=groq_key)
+                logging.info("✅ RAG pipeline ready (Lazy Groq)")
+            except Exception as e:
+                logging.error(f"❌ RAGPipeline failed: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to initialize RAGPipeline: {e}")
+        else:
+            logging.warning("⚠️  No GROQ_API_KEY — RAG chatbot disabled")
+            raise HTTPException(status_code=503, detail="RAG pipeline offline. Add GROQ_API_KEY to .env.")
+    return rag_pipeline
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -93,10 +96,6 @@ async def lifespan(app: FastAPI):
             db_available = False
 
     logging.info("✅ API docs: http://localhost:8000/docs")
-    
-    # Fire and forget ML loading in a separate thread so it doesn't block the event loop
-    asyncio.create_task(asyncio.to_thread(load_ml_models_sync))
-    
     yield
     logging.info("Shutting down...")
 
@@ -155,6 +154,11 @@ def logout(response: Response):
     return {"message": "Successfully logged out"}
 
 
+@app.get("/")
+def home():
+    return {"status": "VitalWatch Backend is Running"}
+
+
 @app.get("/health", response_model=HealthResponse)
 def health_check():
     model_loaded = prediction_engine is not None and prediction_engine.model is not None
@@ -172,11 +176,12 @@ def health_check():
 
 @app.post("/predict", response_model=PredictionResponse)
 def predict(vital_signs: VitalSigns, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if not prediction_engine or prediction_engine.model is None:
+    engine = get_lazy_prediction_engine()
+    if not engine or engine.model is None:
         raise HTTPException(status_code=500, detail="Model not loaded")
 
     vs_dict = vital_signs.model_dump()
-    risk_score, alert_level, alert_message = prediction_engine.predict(vs_dict)
+    risk_score, alert_level, alert_message = engine.predict(vs_dict)
 
     if db_available:
         try:
@@ -204,27 +209,26 @@ def predict(vital_signs: VitalSigns, db: Session = Depends(get_db), current_user
 
 @app.post("/explain")
 def explain(explain_req: ExplainRequest, current_user: User = Depends(get_current_user)):
-    if not prediction_engine or prediction_engine.model is None:
+    engine = get_lazy_prediction_engine()
+    if not engine or engine.model is None:
         raise HTTPException(status_code=500, detail="Model not loaded")
     vs_dict = explain_req.model_dump(exclude={"case_id"})
-    features_impact = prediction_engine.explain(vs_dict)
+    features_impact = engine.explain(vs_dict)
     return {"shap_values": {f["name"]: f["impact"] for f in features_impact}, "top_features": features_impact}
 
 
 @app.get("/patient/{case_id}")
 def get_patient(case_id: int, current_user: User = Depends(get_current_user)):
-    if not prediction_engine:
-        raise HTTPException(status_code=500, detail="Engine not ready")
-    data = prediction_engine.get_patient_data(case_id)
+    engine = get_lazy_prediction_engine()
+    data = engine.get_patient_data(case_id)
     if not data:
         raise HTTPException(status_code=404, detail=f"Case {case_id} not found")
     return data
 
 @app.get("/patient/{case_id}/export")
 def export_patient_csv(case_id: int, current_user: User = Depends(get_current_user)):
-    if not prediction_engine:
-        raise HTTPException(status_code=500, detail="Engine not ready")
-    data = prediction_engine.get_patient_data(case_id)
+    engine = get_lazy_prediction_engine()
+    data = engine.get_patient_data(case_id)
     if not data:
         raise HTTPException(status_code=404, detail=f"Case {case_id} not found")
     
@@ -245,32 +249,32 @@ def export_patient_csv(case_id: int, current_user: User = Depends(get_current_us
 
 @app.get("/analytics")
 def get_analytics(current_user: User = Depends(get_current_user)):
-    if not prediction_engine:
-        raise HTTPException(status_code=500, detail="Engine not ready")
-    return prediction_engine.get_analytics()
+    engine = get_lazy_prediction_engine()
+    return engine.get_analytics()
 
 
 @app.get("/model/metrics")
 def get_model_metrics(threshold: float = 0.5, current_user: User = Depends(get_current_user)):
-    if not prediction_engine:
-        raise HTTPException(status_code=500, detail="Engine not ready")
-    metrics = prediction_engine.get_model_metrics(threshold)
+    engine = get_lazy_prediction_engine()
+    metrics = engine.get_model_metrics(threshold)
     if metrics is None:
         raise HTTPException(status_code=503, detail="Model metrics unavailable — model or dataset not loaded")
     return metrics
 
 
+
 @app.post("/rag/query")
 def rag_query(req: RAGRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if not rag_pipeline:
+    pipeline = get_lazy_rag_pipeline()
+    if not pipeline:
         raise HTTPException(
             status_code=503,
             detail="RAG pipeline offline. Add GROQ_API_KEY to .env and restart.",
         )
 
-    answer, sources, latency_ms = rag_pipeline.query(req.question, req.patient_context)
-    retrieved_docs = rag_pipeline.vectorstore.similarity_search(req.question, k=3)
-    eval_scores = rag_pipeline.evaluate_response(req.question, answer, retrieved_docs)
+    answer, sources, latency_ms = pipeline.query(req.question, req.patient_context)
+    retrieved_docs = pipeline.vectorstore.similarity_search(req.question, k=3)
+    eval_scores = pipeline.evaluate_response(req.question, answer, retrieved_docs)
 
     if db_available:
         try:
