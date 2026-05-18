@@ -12,8 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from predict import PredictionEngine
-from rag import RAGPipeline
+# ML modules (predict, rag) are imported lazily inside helper functions to ensure instant Uvicorn boot
 from schemas import (
     VitalSigns, PredictionResponse, ExplainRequest, ExplainResponse,
     RAGRequest, HealthResponse
@@ -37,6 +36,7 @@ def get_lazy_prediction_engine():
     if prediction_engine is None:
         logging.info("Lazy loading PredictionEngine...")
         try:
+            from predict import PredictionEngine
             prediction_engine = PredictionEngine()
             logging.info("✅ Prediction engine loaded (Lazy)")
         except Exception as e:
@@ -51,6 +51,7 @@ def get_lazy_rag_pipeline():
         groq_key = os.environ.get("GROQ_API_KEY", "")
         if groq_key and groq_key not in ("your_key_here", ""):
             try:
+                from rag import RAGPipeline
                 rag_pipeline = RAGPipeline(groq_api_key=groq_key)
                 logging.info("✅ RAG pipeline ready (Lazy Groq)")
             except Exception as e:
