@@ -30,14 +30,14 @@ def make_pipeline():
 
     # FAISS.from_documents returns our mock vectorstore
     with (
-        patch("rag.OpenAIEmbeddings", return_value=mock_embeddings),
-        patch("rag.ChatOpenAI",       return_value=mock_llm),
+        patch("rag.HuggingFaceEmbeddings", return_value=mock_embeddings),
+        patch("rag.ChatGroq",       return_value=mock_llm),
         patch("rag.FAISS.from_documents", return_value=mock_vectorstore),
         patch("rag.FAISS.load_local",     side_effect=Exception("no index")),
         patch("os.makedirs"),
     ):
         mock_vectorstore.save_local = MagicMock()
-        pipeline = RAGPipeline(openai_api_key="sk-test-key")
+        pipeline = RAGPipeline(groq_api_key="gsk-test-key")
         pipeline.vectorstore = mock_vectorstore
 
     return pipeline, mock_llm, mock_vectorstore
@@ -51,13 +51,13 @@ class TestRagInit:
     def test_raises_without_api_key(self):
         """RAGPipeline must raise ValueError if no key is supplied."""
         from rag import RAGPipeline
-        with pytest.raises(ValueError, match="OpenAI API key"):
-            RAGPipeline(openai_api_key=None)
+        with pytest.raises(ValueError, match="Groq API key"):
+            RAGPipeline(groq_api_key=None)
 
     def test_raises_with_empty_string_key(self):
         from rag import RAGPipeline
         with pytest.raises(ValueError):
-            RAGPipeline(openai_api_key="")
+            RAGPipeline(groq_api_key="")
 
     def test_knowledge_base_has_16_documents(self):
         """
@@ -65,8 +65,8 @@ class TestRagInit:
         (the spec stated in the README — a real reviewer will count them).
         """
         with (
-            patch("rag.OpenAIEmbeddings"),
-            patch("rag.ChatOpenAI"),
+            patch("rag.HuggingFaceEmbeddings"),
+            patch("rag.ChatGroq"),
             patch("rag.FAISS.from_documents", return_value=MagicMock()),
             patch("rag.FAISS.load_local", side_effect=Exception("no index")),
             patch("os.makedirs"),
@@ -82,8 +82,8 @@ class TestRagInit:
     def test_each_document_has_source_metadata(self):
         """Every document must carry a 'source' metadata key."""
         with (
-            patch("rag.OpenAIEmbeddings"),
-            patch("rag.ChatOpenAI"),
+            patch("rag.HuggingFaceEmbeddings"),
+            patch("rag.ChatGroq"),
             patch("rag.FAISS.from_documents", return_value=MagicMock()),
             patch("rag.FAISS.load_local", side_effect=Exception("no index")),
             patch("os.makedirs"),
@@ -99,8 +99,8 @@ class TestRagInit:
 
     def test_documents_have_non_empty_content(self):
         with (
-            patch("rag.OpenAIEmbeddings"),
-            patch("rag.ChatOpenAI"),
+            patch("rag.HuggingFaceEmbeddings"),
+            patch("rag.ChatGroq"),
             patch("rag.FAISS.from_documents", return_value=MagicMock()),
             patch("rag.FAISS.load_local", side_effect=Exception("no index")),
             patch("os.makedirs"),
