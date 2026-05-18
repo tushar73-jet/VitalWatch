@@ -1,3 +1,12 @@
+---
+title: VitalWatch Backend
+emoji: 🏥
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # VitalWatch 2.0
 
 > **AI-powered intraoperative hypotension prediction platform**  
