@@ -31,6 +31,7 @@ load_dotenv()
 
 prediction_engine = None
 rag_pipeline = None
+db_available = False
 def get_lazy_prediction_engine():
     global prediction_engine
     if prediction_engine is None:
