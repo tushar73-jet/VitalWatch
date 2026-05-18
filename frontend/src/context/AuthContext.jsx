@@ -37,7 +37,15 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={{ user, login, logout, loading }}>
-      {!loading && children}
+      {loading ? (
+        <div className="min-h-screen bg-black flex flex-col items-center justify-center text-mono">
+          <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mb-4 shadow-[0_0_15px_rgba(0,229,255,0.5)]"></div>
+          <div className="text-cyan-400 font-bold tracking-widest text-sm animate-pulse">CONNECTING TO VITALWATCH CORE...</div>
+          <div className="text-gray-600 text-xs mt-2 font-mono">Verifying secure session & backend health</div>
+        </div>
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 };

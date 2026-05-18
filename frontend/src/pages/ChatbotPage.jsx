@@ -132,7 +132,7 @@ export default function ChatbotPage() {
               <div className="text-white font-bold font-mono mt-0.5">RAG Medical Assistant</div>
             </div>
             <div className={`text-xs px-3 py-1 rounded-full border font-mono ${ragOffline ? 'border-red-500 text-red-400' : 'border-cyan-400/30 text-cyan-400'}`}>
-              {ragOffline ? '● OFFLINE' : '● FAISS + GPT-4o-mini'}
+              {ragOffline ? '● OFFLINE' : '● FAISS + Groq Llama 3'}
             </div>
           </div>
 
@@ -317,7 +317,7 @@ export default function ChatbotPage() {
           <div className="p-5 mt-auto">
             <div className="bg-black border border-gray-800 rounded p-4 text-xs text-gray-600 font-mono leading-relaxed">
               <div className="text-gray-500 mb-2 font-bold">About this assistant</div>
-              RAG pipeline grounded in 16 anesthesia guidelines. Powered by GPT-4o-mini + FAISS vector search.
+              RAG pipeline grounded in 16 anesthesia guidelines. Powered by Groq Llama 3 + FAISS vector search.
               Answers are clinically contextualized and source-cited.
             </div>
           </div>

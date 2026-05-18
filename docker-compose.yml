@@ -21,7 +21,7 @@ services:
       bash -c "pip install -r ../requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000"
     environment:
       - DATABASE_URL=postgresql://postgres:password@db:5432/vitalwatch
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_key_here}
+      - GROQ_API_KEY=${GROQ_API_KEY:-your_key_here}
     depends_on:
       - db
   frontend:

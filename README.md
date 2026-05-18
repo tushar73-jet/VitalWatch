@@ -116,7 +116,7 @@ cp .env.example .env
 
 Edit `.env`:
 ```env
-OPENAI_API_KEY=sk-...your-key-here...
+GROQ_API_KEY=gsk-...your-key-here...
 
 # Supabase (optional — app works without this):
 # DATABASE_URL=postgresql://postgres:[password]@db.xxxx.supabase.co:5432/postgres
