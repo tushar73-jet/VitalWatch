@@ -16,7 +16,7 @@ class PredictionEngine:
         self.model_path = os.path.join(base_dir, 'models', 'ioh_model.pkl')
         self.scaler_path = os.path.join(base_dir, 'models', 'ioh_scaler.pkl')
         self.features_path = os.path.join(base_dir, 'models', 'feature_cols.pkl')
-        self.data_path = os.path.join(base_dir, 'data', 'test_sample.csv.gz')
+        self.data_path = os.path.join(base_dir, 'data', 'test_sample.csv')
         
         self.model = None
         self.scaler = None
