@@ -3,6 +3,7 @@ import uvicorn
 import logging
 import json
 from datetime import datetime
+import asyncio
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
@@ -32,6 +33,29 @@ prediction_engine = None
 rag_pipeline = None
 db_available = False
 
+
+def load_ml_models_sync():
+    global prediction_engine, rag_pipeline
+    
+    # 1. Load Prediction Engine
+    try:
+        # Runs synchronously in a background thread
+        prediction_engine = PredictionEngine()
+        logging.info("✅ Prediction engine loaded (Background Thread)")
+    except Exception as e:
+        logging.error(f"❌ PredictionEngine failed: {e}")
+
+    # 2. Load RAG Pipeline (SentenceTransformers + FAISS)
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if groq_key and groq_key not in ("your_key_here", ""):
+        try:
+            # Runs synchronously in a background thread
+            rag_pipeline = RAGPipeline(groq_api_key=groq_key)
+            logging.info("✅ RAG pipeline ready (Background Thread)")
+        except Exception as e:
+            logging.error(f"❌ RAGPipeline failed: {e}")
+    else:
+        logging.warning("⚠️  No GROQ_API_KEY — RAG chatbot disabled")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -68,23 +92,11 @@ async def lifespan(app: FastAPI):
             logging.warning(f"Table creation failed: {e}")
             db_available = False
 
-    try:
-        prediction_engine = PredictionEngine()
-        logging.info("✅ Prediction engine loaded")
-    except Exception as e:
-        logging.error(f"❌ PredictionEngine failed: {e}")
-
-    groq_key = os.environ.get("GROQ_API_KEY", "")
-    if groq_key and groq_key not in ("your_key_here", ""):
-        try:
-            rag_pipeline = RAGPipeline(groq_api_key=groq_key)
-            logging.info("✅ RAG pipeline ready (Groq)")
-        except Exception as e:
-            logging.error(f"❌ RAGPipeline failed: {e}")
-    else:
-        logging.warning("⚠️  No GROQ_API_KEY — RAG chatbot disabled")
-
     logging.info("✅ API docs: http://localhost:8000/docs")
+    
+    # Fire and forget ML loading in a separate thread so it doesn't block the event loop
+    asyncio.create_task(asyncio.to_thread(load_ml_models_sync))
+    
     yield
     logging.info("Shutting down...")
 
