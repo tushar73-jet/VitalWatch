@@ -23,11 +23,39 @@ export default function MonitorPage() {
     const [chartData, setChartData] = useState([]);
     const [shapFeatures, setShapFeatures] = useState([]);
     
+    const [loadingCases, setLoadingCases] = useState(true);
+    const [errorCases, setErrorCases] = useState(null);
+    const [loadingPatient, setLoadingPatient] = useState(false);
+    
     const stepCountRef = useRef(0);
+
+    const fetchCases = useCallback(async () => {
+        setLoadingCases(true);
+        setErrorCases(null);
+        try {
+            const data = await getAnalytics();
+            if (data && data.per_case) {
+                const caseIds = data.per_case.map(c => c.case_id);
+                setCases(caseIds);
+                if (caseIds.length > 0) {
+                    loadCase(caseIds[0]);
+                }
+            }
+        } catch (e) {
+            setErrorCases('Could not load patient cases. Is the backend running?');
+        } finally {
+            setLoadingCases(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchCases();
+    }, [fetchCases]);
 
     const loadCase = useCallback(async (cid) => {
         setSelectedCase(cid);
         setIsPlaying(false);
+        setLoadingPatient(true);
         try {
             const data = await getPatient(cid);
             setPatientData(data);
@@ -44,20 +72,10 @@ export default function MonitorPage() {
             }
         } catch (e) {
             console.error("Failed to load patient:", e);
+        } finally {
+            setLoadingPatient(false);
         }
     }, []);
-
-    useEffect(() => {
-        getAnalytics().then(data => {
-            if (data && data.per_case) {
-                const caseIds = data.per_case.map(c => c.case_id);
-                setCases(caseIds);
-                if (caseIds.length > 0) {
-                    loadCase(caseIds[0]);
-                }
-            }
-        }).catch(console.error);
-    }, [loadCase]);
 
     const processRow = async (row, index) => {
         setCurrentVitals({
@@ -140,20 +158,44 @@ export default function MonitorPage() {
         badgeText = "STABLE";
     }
 
+function SkeletonBlock({ h = 'h-64' }) {
+    return <div className={`${h} bg-gray-900 rounded-lg animate-pulse w-full`} />;
+}
+
     return (
         <div className="bg-black min-h-screen pt-[68px] flex flex-col font-mono text-gray-200">
+            {errorCases ? (
+                <div className="flex-1 flex items-center justify-center p-8">
+                    <div className="bg-red-950/40 border border-red-800/50 rounded-lg p-8 max-w-md w-full flex flex-col items-center text-center">
+                        <div className="text-red-400 font-mono text-lg font-bold mb-2">⚠ System Offline</div>
+                        <div className="text-gray-400 text-sm mb-6">{errorCases}</div>
+                        <button
+                            onClick={fetchCases}
+                            className="bg-cyan-500 hover:bg-cyan-400 text-black px-6 py-2 rounded font-bold transition-colors"
+                        >
+                            Retry Connection
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <>
             {/* Control bar */}
             <div className="bg-gray-950 border-b border-gray-800 px-6 py-3 flex items-center justify-between shadow-lg z-10 shrink-0">
                 <div className="flex items-center gap-6">
                     <div className="flex items-center gap-2">
                         <span className="text-gray-500 text-sm">CASE:</span>
-                        <select 
-                            className="bg-black text-cyan-400 border border-gray-800 px-3 py-1 font-mono text-sm rounded outline-none cursor-pointer"
-                            value={selectedCase || ''}
-                            onChange={(e) => loadCase(parseInt(e.target.value))}
-                        >
-                            {cases.map(c => <option key={c} value={c}>#{c}</option>)}
-                        </select>
+                        {loadingCases ? (
+                            <div className="w-24 h-7 bg-gray-900 animate-pulse rounded" />
+                        ) : (
+                            <select 
+                                className="bg-black text-cyan-400 border border-gray-800 px-3 py-1 font-mono text-sm rounded outline-none cursor-pointer"
+                                value={selectedCase || ''}
+                                onChange={(e) => loadCase(parseInt(e.target.value))}
+                                disabled={loadingCases || loadingPatient}
+                            >
+                                {cases.map(c => <option key={c} value={c}>#{c}</option>)}
+                            </select>
+                        )}
                     </div>
                     
                     <div className="w-px h-6 bg-gray-800 hidden sm:block" />
@@ -161,7 +203,8 @@ export default function MonitorPage() {
                     <div className="flex items-center gap-2">
                         <button 
                             onClick={() => setIsPlaying(!isPlaying)}
-                            className={`p-2 rounded transition ${isPlaying ? 'bg-cyan-900 text-cyan-400 shadow-[0_0_10px_rgba(0,229,255,0.5)]' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`}
+                            disabled={loadingCases || loadingPatient}
+                            className={`p-2 rounded transition ${isPlaying ? 'bg-cyan-900 text-cyan-400 shadow-[0_0_10px_rgba(0,229,255,0.5)]' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'} disabled:opacity-50`}
                         >
                             {isPlaying ? <Pause size={18} /> : <Play size={18} />}
                         </button>
@@ -195,24 +238,34 @@ export default function MonitorPage() {
                 {/* Left panel */}
                 <div className="col-span-12 lg:col-span-3 bg-gray-950 border-r border-gray-800 p-6 flex flex-col justify-between shrink-0">
                     <div>
-                        <div className="mb-6">
-                            <div className="text-gray-500 text-xs tracking-widest mb-1">MAP (mmHg)</div>
-                            <div className="text-5xl font-mono text-cyan-400 font-bold">
-                                {currentVitals.MAP ? currentVitals.MAP.toFixed(1) : "0.0"}
-                            </div>
-                        </div>
-                        <div className="mb-6">
-                            <div className="text-gray-500 text-xs tracking-widest mb-1">HR (bpm)</div>
-                            <div className="text-5xl font-mono text-white font-bold">
-                                {currentVitals.HR ? currentVitals.HR.toFixed(1) : "0.0"}
-                            </div>
-                        </div>
-                        <div className="mb-6">
-                            <div className="text-gray-500 text-xs tracking-widest mb-1">SpO2 (%)</div>
-                            <div className="text-5xl font-mono text-green-400 font-bold">
-                                {currentVitals.SpO2 ? currentVitals.SpO2.toFixed(1) : "0.0"}
-                            </div>
-                        </div>
+                        {loadingPatient ? (
+                            <>
+                                <SkeletonBlock h="h-16 mb-6" />
+                                <SkeletonBlock h="h-16 mb-6" />
+                                <SkeletonBlock h="h-16 mb-6" />
+                            </>
+                        ) : (
+                            <>
+                                <div className="mb-6">
+                                    <div className="text-gray-500 text-xs tracking-widest mb-1">MAP (mmHg)</div>
+                                    <div className="text-5xl font-mono text-cyan-400 font-bold">
+                                        {currentVitals.MAP ? currentVitals.MAP.toFixed(1) : "0.0"}
+                                    </div>
+                                </div>
+                                <div className="mb-6">
+                                    <div className="text-gray-500 text-xs tracking-widest mb-1">HR (bpm)</div>
+                                    <div className="text-5xl font-mono text-white font-bold">
+                                        {currentVitals.HR ? currentVitals.HR.toFixed(1) : "0.0"}
+                                    </div>
+                                </div>
+                                <div className="mb-6">
+                                    <div className="text-gray-500 text-xs tracking-widest mb-1">SpO2 (%)</div>
+                                    <div className="text-5xl font-mono text-green-400 font-bold">
+                                        {currentVitals.SpO2 ? currentVitals.SpO2.toFixed(1) : "0.0"}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     <div className="mt-8 pt-8 border-t border-gray-800">
@@ -234,22 +287,28 @@ export default function MonitorPage() {
                     </div>
                     
                     <div className="flex-1 w-full relative">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
-                                <XAxis dataKey="time" stroke="#555" tick={{fill: '#888', fontSize: 12}} dy={10} />
-                                <YAxis stroke="#555" tick={{fill: '#888', fontSize: 12}} domain={['auto', 'auto']} dx={-5} />
-                                <Tooltip 
-                                    contentStyle={{ backgroundColor: 'rgba(0,0,0,0.9)', borderColor: '#333', borderRadius: '8px', color: '#fff' }}
-                                    itemStyle={{ fontSize: '14px', fontWeight: 'bold' }}
-                                />
-                                <ReferenceLine y={65} stroke="red" strokeDasharray="5 5" strokeWidth={1} label={{ position: 'insideTopLeft', value: 'MAP CRITICAL (65)', fill: 'red', fontSize: 10 }} />
-                                
-                                <Line type="monotone" dataKey="MAP" stroke="#00E5FF" strokeWidth={2} dot={false} isAnimationActive={false} />
-                                <Line type="monotone" dataKey="HR" stroke="#FFFFFF" strokeWidth={1.5} dot={false} isAnimationActive={false} opacity={0.6} />
-                                <Line type="monotone" dataKey="SpO2" stroke="#4ADE80" strokeWidth={1.5} dot={false} isAnimationActive={false} opacity={0.6} />
-                            </LineChart>
-                        </ResponsiveContainer>
+                        {loadingPatient ? (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <SkeletonBlock h="h-full" />
+                            </div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
+                                    <XAxis dataKey="time" stroke="#555" tick={{fill: '#888', fontSize: 12}} dy={10} />
+                                    <YAxis stroke="#555" tick={{fill: '#888', fontSize: 12}} domain={['auto', 'auto']} dx={-5} />
+                                    <Tooltip 
+                                        contentStyle={{ backgroundColor: 'rgba(0,0,0,0.9)', borderColor: '#333', borderRadius: '8px', color: '#fff' }}
+                                        itemStyle={{ fontSize: '14px', fontWeight: 'bold' }}
+                                    />
+                                    <ReferenceLine y={65} stroke="red" strokeDasharray="5 5" strokeWidth={1} label={{ position: 'insideTopLeft', value: 'MAP CRITICAL (65)', fill: 'red', fontSize: 10 }} />
+                                    
+                                    <Line type="monotone" dataKey="MAP" stroke="#00E5FF" strokeWidth={2} dot={false} isAnimationActive={false} />
+                                    <Line type="monotone" dataKey="HR" stroke="#FFFFFF" strokeWidth={1.5} dot={false} isAnimationActive={false} opacity={0.6} />
+                                    <Line type="monotone" dataKey="SpO2" stroke="#4ADE80" strokeWidth={1.5} dot={false} isAnimationActive={false} opacity={0.6} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        )}
                     </div>
                 </div>
 
@@ -261,11 +320,18 @@ export default function MonitorPage() {
                     </div>
 
                     <div className="flex flex-col gap-4 mt-2">
-                        {shapFeatures.length === 0 ? (
+                        {loadingPatient ? (
+                            <>
+                                <SkeletonBlock h="h-8 mb-2" />
+                                <SkeletonBlock h="h-8 mb-2" />
+                                <SkeletonBlock h="h-8 mb-2" />
+                                <SkeletonBlock h="h-8 mb-2" />
+                            </>
+                        ) : shapFeatures.length === 0 ? (
                             <div className="text-gray-600 text-xs italic mt-4">Computing real-time SHAP topology...</div>
                         ) : null}
                         
-                        {shapFeatures.map(f => {
+                        {!loadingPatient && shapFeatures.map(f => {
                             const isPos = f.impact > 0;
                             const colorClass = isPos ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]';
                             const maxImpact = Math.max(...shapFeatures.map(x => Math.abs(x.impact)), 0.001);
@@ -290,6 +356,8 @@ export default function MonitorPage() {
                     </div>
                 </div>
             </div>
+                </>
+            )}
         </div>
     );
 }

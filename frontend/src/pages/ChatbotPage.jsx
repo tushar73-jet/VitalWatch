@@ -16,25 +16,43 @@ function TypewriterText({ text }) {
   return <span>{displayed}<span className="cursor-blink opacity-70">▌</span></span>;
 }
 
+function SkeletonBlock({ h = 'h-64', w = 'w-full' }) {
+  return <div className={`${h} ${w} bg-gray-900 rounded-lg animate-pulse`} />;
+}
+
 export default function ChatbotPage() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(true);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [patientMode, setPatientMode] = useState(false);
   const [cases, setCases] = useState([]);
+  const [loadingCases, setLoadingCases] = useState(true);
+  const [errorCases, setErrorCases] = useState(null);
   const [selectedCase, setSelectedCase] = useState('');
   const [patientStats, setPatientStats] = useState(null);
+  const [loadingPatient, setLoadingPatient] = useState(false);
   const [ragOffline, setRagOffline] = useState(false);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
-    getRagSuggestions().then(setSuggestions).catch(() => {});
-    getAnalytics().then(d => {
-      if (d?.per_case) setCases(d.per_case);
-    }).catch(() => {});
+    setLoadingSuggestions(true);
+    getRagSuggestions()
+      .then(setSuggestions)
+      .catch(() => setSuggestions([]))
+      .finally(() => setLoadingSuggestions(false));
+      
+    setLoadingCases(true);
+    getAnalytics()
+      .then(d => {
+        if (d?.per_case) setCases(d.per_case);
+        setErrorCases(null);
+      })
+      .catch(() => setErrorCases('Failed to load patient cases.'))
+      .finally(() => setLoadingCases(false));
   }, []);
 
   useEffect(() => {
@@ -46,6 +64,7 @@ export default function ChatbotPage() {
     setSelectedCase(id);
     if (!id) { setPatientStats(null); return; }
     const caseObj = cases.find(c => c.case_id === id);
+    setLoadingPatient(true);
     try {
       const rows = await getPatient(id);
       const n = Math.min(100, rows.length);
@@ -58,6 +77,7 @@ export default function ChatbotPage() {
         maxRisk: caseObj ? ((caseObj.max_risk || 0) * 100).toFixed(1) : '0.0',
       });
     } catch { setPatientStats(null); }
+    finally { setLoadingPatient(false); }
   };
 
   const send = async (text) => {
@@ -121,17 +141,26 @@ export default function ChatbotPage() {
             {showSuggestions && messages.length === 0 && (
               <div>
                 <div className="text-gray-600 text-xs uppercase tracking-widest mb-4">Suggested Questions</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {suggestions.map((s, i) => (
-                    <button
-                      key={i}
-                      onClick={() => send(s)}
-                      className="text-left border border-gray-800 text-gray-400 text-xs p-3 rounded hover:border-cyan-400/50 hover:text-cyan-400 hover:bg-cyan-400/5 transition font-mono leading-relaxed"
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
+                {loadingSuggestions ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <SkeletonBlock h="h-12" />
+                    <SkeletonBlock h="h-12" />
+                    <SkeletonBlock h="h-12" />
+                    <SkeletonBlock h="h-12" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {suggestions.map((s, i) => (
+                      <button
+                        key={i}
+                        onClick={() => send(s)}
+                        className="text-left border border-gray-800 text-gray-400 text-xs p-3 rounded hover:border-cyan-400/50 hover:text-cyan-400 hover:bg-cyan-400/5 transition font-mono leading-relaxed"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -244,16 +273,29 @@ export default function ChatbotPage() {
           {patientMode && (
             <div className="p-5 border-b border-gray-900">
               <div className="text-xs text-gray-500 uppercase tracking-widest mb-3">Select Case</div>
-              <select
-                value={selectedCase}
-                onChange={handleCaseSelect}
-                className="w-full bg-black border border-gray-700 text-cyan-400 text-xs font-mono rounded px-3 py-2 focus:outline-none focus:border-cyan-400"
-              >
-                <option value="">-- select case --</option>
-                {cases.map(c => <option key={c.case_id} value={c.case_id}>Case #{c.case_id}</option>)}
-              </select>
+              {loadingCases ? (
+                <SkeletonBlock h="h-8" />
+              ) : errorCases ? (
+                <div className="text-red-400 text-xs font-mono">{errorCases}</div>
+              ) : (
+                <select
+                  value={selectedCase}
+                  onChange={handleCaseSelect}
+                  disabled={loadingPatient}
+                  className="w-full bg-black border border-gray-700 text-cyan-400 text-xs font-mono rounded px-3 py-2 focus:outline-none focus:border-cyan-400"
+                >
+                  <option value="">-- select case --</option>
+                  {cases.map(c => <option key={c.case_id} value={c.case_id}>Case #{c.case_id}</option>)}
+                </select>
+              )}
 
-              {patientStats && (
+              {loadingPatient ? (
+                <div className="mt-4 space-y-2">
+                  <SkeletonBlock h="h-10" />
+                  <SkeletonBlock h="h-10" />
+                  <SkeletonBlock h="h-10" />
+                </div>
+              ) : patientStats && (
                 <div className="mt-4 space-y-2">
                   {[
                     { label: 'Avg MAP', val: `${patientStats.MAP} mmHg`, color: 'text-cyan-400' },
