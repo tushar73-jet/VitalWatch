@@ -5,8 +5,9 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from predict import PredictionEngine
@@ -16,7 +17,12 @@ from schemas import (
     RAGRequest, HealthResponse
 )
 from database import engine, Base, get_db, test_connection
-from models_db import PredictionLog, ChatSession, ChatMessage
+from models_db import PredictionLog, ChatSession, ChatMessage, User
+from auth import (
+    verify_password, get_password_hash, create_access_token,
+    get_current_user, require_role, ACCESS_TOKEN_EXPIRE_MINUTES
+)
+from datetime import timedelta
 
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
@@ -36,6 +42,27 @@ async def lifespan(app: FastAPI):
         try:
             Base.metadata.create_all(bind=engine)
             logging.info("✅ Database tables ready")
+            
+            # Pre-seed default users
+            db = next(get_db())
+            if db.query(User).count() == 0:
+                logging.info("Pre-seeding default users...")
+                admin_user = User(
+                    username="admin",
+                    full_name="System Administrator",
+                    hashed_password=get_password_hash("admin123"),
+                    role="admin"
+                )
+                clinician_user = User(
+                    username="doctor",
+                    full_name="Dr. Smith",
+                    hashed_password=get_password_hash("doctor123"),
+                    role="clinician"
+                )
+                db.add(admin_user)
+                db.add(clinician_user)
+                db.commit()
+                logging.info("✅ Default users created")
         except Exception as e:
             logging.warning(f"Table creation failed: {e}")
             db_available = False
@@ -72,6 +99,27 @@ app.add_middleware(
 )
 
 
+@app.post("/auth/token", response_model=dict)
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username, "role": user.role}, expires_delta=access_token_expires
+    )
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "role": user.role,
+        "full_name": user.full_name
+    }
+
+
 @app.get("/health", response_model=HealthResponse)
 def health_check():
     model_loaded = prediction_engine is not None and prediction_engine.model is not None
@@ -88,7 +136,7 @@ def health_check():
 
 
 @app.post("/predict", response_model=PredictionResponse)
-def predict(vital_signs: VitalSigns, db: Session = Depends(get_db)):
+def predict(vital_signs: VitalSigns, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not prediction_engine or prediction_engine.model is None:
         raise HTTPException(status_code=500, detail="Model not loaded")
 
@@ -119,7 +167,7 @@ def predict(vital_signs: VitalSigns, db: Session = Depends(get_db)):
 
 
 @app.post("/explain")
-def explain(explain_req: ExplainRequest):
+def explain(explain_req: ExplainRequest, current_user: User = Depends(get_current_user)):
     if not prediction_engine or prediction_engine.model is None:
         raise HTTPException(status_code=500, detail="Model not loaded")
     vs_dict = explain_req.model_dump(exclude={"case_id"})
@@ -128,7 +176,7 @@ def explain(explain_req: ExplainRequest):
 
 
 @app.get("/patient/{case_id}")
-def get_patient(case_id: int):
+def get_patient(case_id: int, current_user: User = Depends(get_current_user)):
     if not prediction_engine:
         raise HTTPException(status_code=500, detail="Engine not ready")
     data = prediction_engine.get_patient_data(case_id)
@@ -138,14 +186,14 @@ def get_patient(case_id: int):
 
 
 @app.get("/analytics")
-def get_analytics():
+def get_analytics(current_user: User = Depends(get_current_user)):
     if not prediction_engine:
         raise HTTPException(status_code=500, detail="Engine not ready")
     return prediction_engine.get_analytics()
 
 
 @app.get("/model/metrics")
-def get_model_metrics():
+def get_model_metrics(current_user: User = Depends(get_current_user)):
     if not prediction_engine:
         raise HTTPException(status_code=500, detail="Engine not ready")
     metrics = prediction_engine.get_model_metrics()
@@ -155,7 +203,7 @@ def get_model_metrics():
 
 
 @app.post("/rag/query")
-def rag_query(req: RAGRequest, db: Session = Depends(get_db)):
+def rag_query(req: RAGRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not rag_pipeline:
         raise HTTPException(
             status_code=503,
@@ -187,7 +235,7 @@ def rag_query(req: RAGRequest, db: Session = Depends(get_db)):
 
 
 @app.get("/rag/suggestions")
-def get_rag_suggestions():
+def get_rag_suggestions(current_user: User = Depends(get_current_user)):
     return [
         "What are the clinical thresholds for intraoperative hypotension?",
         "How is IOH treated when general anesthesia is the cause?",
@@ -201,7 +249,7 @@ def get_rag_suggestions():
 
 
 @app.get("/history/{session_id}")
-def get_chat_history(session_id: str, db: Session = Depends(get_db)):
+def get_chat_history(session_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not db_available:
         return []
     messages = (

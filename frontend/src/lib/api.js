@@ -4,6 +4,17 @@ const api = axios.create({
   baseURL: '/api' // Directs gracefully through Vite server proxy locally or production reverse-proxy in deployment
 });
 
+// Add a request interceptor for authentication
+api.interceptors.request.use((config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+}, (error) => {
+    return Promise.reject(error);
+});
+
 export const getHealth = async () => {
     const res = await api.get('/health');
     return res.data;
@@ -46,3 +57,16 @@ export const getModelMetrics = async () => {
     const res = await api.get('/model/metrics');
     return res.data;
 };
+
+export const login = async (username, password) => {
+    const params = new URLSearchParams();
+    params.append('username', username);
+    params.append('password', password);
+    const res = await api.post('/auth/token', params, {
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+    });
+    return res.data;
+};
+

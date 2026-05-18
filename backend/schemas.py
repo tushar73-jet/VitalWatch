@@ -64,3 +64,20 @@ class HealthResponse(BaseModel):
     model_loaded: bool
     rag_ready: bool
     total_cases: int
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    role: str
+    full_name: str
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+
+class UserSchema(BaseModel):
+    username: str
+    full_name: str
+    role: str
+    
+    class Config:
+        from_attributes = True

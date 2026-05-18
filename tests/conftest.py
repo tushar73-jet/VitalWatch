@@ -108,5 +108,13 @@ def test_client(engine):
     import main as main_module
     main_module.prediction_engine = engine
 
+    # Override authentication for tests
+    from auth import get_current_user
+    from models_db import User
+    def override_get_current_user():
+        return User(username="testuser", full_name="Test User", role="admin")
+    
+    main_module.app.dependency_overrides[get_current_user] = override_get_current_user
+
     from fastapi.testclient import TestClient
     return TestClient(main_module.app)

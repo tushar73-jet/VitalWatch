@@ -18,3 +18,5 @@ sqlalchemy
 pytest
 httpx
 reportlab
+PyJWT
+passlib[bcrypt]
