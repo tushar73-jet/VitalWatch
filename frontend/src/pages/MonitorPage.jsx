@@ -209,6 +209,14 @@ function SkeletonBlock({ h = 'h-64' }) {
                             {isPlaying ? <Pause size={18} /> : <Play size={18} />}
                         </button>
                         
+                        <button
+                            onClick={() => window.open(`/api/patient/${selectedCase}/export`, '_blank')}
+                            disabled={loadingCases || loadingPatient || !selectedCase}
+                            className="bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition disabled:opacity-50 border border-gray-700 ml-2"
+                        >
+                            Export CSV
+                        </button>
+                        
                         <div className="flex items-center bg-gray-900 rounded overflow-hidden border border-gray-800 ml-2">
                             {[1, 5, 10].map(s => (
                                 <button

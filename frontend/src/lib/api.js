@@ -1,18 +1,8 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api' // Directs gracefully through Vite server proxy locally or production reverse-proxy in deployment
-});
-
-// Add a request interceptor for authentication
-api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-}, (error) => {
-    return Promise.reject(error);
+  baseURL: '/api', // Directs gracefully through Vite server proxy locally or production reverse-proxy in deployment
+  withCredentials: true
 });
 
 export const getHealth = async () => {
@@ -53,8 +43,8 @@ export const getRagSuggestions = async () => {
     return res.data;
 };
 
-export const getModelMetrics = async () => {
-    const res = await api.get('/model/metrics');
+export const getModelMetrics = async (threshold = 0.5) => {
+    const res = await api.get(`/model/metrics?threshold=${threshold}`);
     return res.data;
 };
 
@@ -69,4 +59,15 @@ export const login = async (username, password) => {
     });
     return res.data;
 };
+
+export const checkAuth = async () => {
+    const res = await api.get('/auth/me');
+    return res.data;
+};
+
+export const apiLogout = async () => {
+    const res = await api.post('/auth/logout');
+    return res.data;
+};
+
 

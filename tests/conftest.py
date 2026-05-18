@@ -103,6 +103,7 @@ def test_client(engine):
     """
     import os
     os.environ.setdefault("NODE_ENV", "test")
+    os.environ.setdefault("JWT_SECRET_KEY", "test_secret_for_pytest")
 
     # Patch the global prediction_engine before importing main
     import main as main_module

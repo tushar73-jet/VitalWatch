@@ -188,7 +188,7 @@ class PredictionEngine:
                 "risk_distribution": {"bins": [], "counts": []}
             }
 
-    def get_model_metrics(self):
+    def get_model_metrics(self, threshold: float = 0.5):
         """Compute real model evaluation metrics from the test dataset."""
         if self.df.empty or not self.model or not self.scaler or not self.feature_cols:
             return None
@@ -247,7 +247,7 @@ class PredictionEngine:
                     "f1": round(float(f1), 4),
                 }
 
-            default_conf = conf_at(0.5)
+            default_conf = conf_at(threshold)
 
             # --- Feature Importance from model coefficients ---
             coefs = np.abs(self.model.coef_[0])
@@ -264,7 +264,7 @@ class PredictionEngine:
             return {
                 "auc_roc": round(auc_roc, 4),
                 "roc_curve": roc_data,
-                "default_threshold": 0.5,
+                "default_threshold": threshold,
                 "confusion_matrix": default_conf,
                 "sensitivity": sensitivity_data,
                 "feature_importance": feature_importance,

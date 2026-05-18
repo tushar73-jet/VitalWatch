@@ -32,21 +32,26 @@ export default function PerformancePage() {
   const [threshold, setThreshold]         = useState(0.5);
   const [animateFeatures, setAnimateFeatures] = useState(false);
 
-  const fetchMetrics = useCallback(async () => {
-    setLoading(true);
+  const fetchMetrics = useCallback(async (currentThreshold) => {
+    if (!metricsData) setLoading(true);
     setError(null);
     try {
-      const data = await getModelMetrics();
+      const data = await getModelMetrics(currentThreshold);
       setMetricsData(data);
-      setTimeout(() => setAnimateFeatures(true), 400);
+      if (!metricsData) setTimeout(() => setAnimateFeatures(true), 400);
     } catch (e) {
       setError('Could not load model metrics. Is the backend running?');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [metricsData]);
 
-  useEffect(() => { fetchMetrics(); }, [fetchMetrics]);
+  useEffect(() => { 
+    const debounce = setTimeout(() => {
+        fetchMetrics(threshold);
+    }, 150);
+    return () => clearTimeout(debounce);
+  }, [threshold, fetchMetrics]);
 
   // Find sensitivity row nearest to current threshold
   const sensRow = metricsData?.sensitivity?.reduce((best, row) =>
@@ -54,17 +59,11 @@ export default function PerformancePage() {
     metricsData?.sensitivity?.[0] ?? {}
   ) ?? {};
 
-  // Derive live confusion matrix counts from sensitivity row + dataset totals
-  const totalRows = metricsData?.total_rows ?? 0;
-  const iohRate   = metricsData?.ioh_rate   ?? 0;
-  const P  = Math.round(totalRows * iohRate);
-  const N  = totalRows - P;
-  const TP = Math.round(P * (sensRow.recall    ?? 0));
-  const FN = P - TP;
-  const FP = sensRow.precision > 0
-    ? Math.round(TP * (1 - sensRow.precision) / sensRow.precision)
-    : 0;
-  const TN = N - FP;
+  // Use backend confusion matrix
+  const TP = metricsData?.confusion_matrix?.tp ?? 0;
+  const TN = metricsData?.confusion_matrix?.tn ?? 0;
+  const FP = metricsData?.confusion_matrix?.fp ?? 0;
+  const FN = metricsData?.confusion_matrix?.fn ?? 0;
 
   const maxImp = metricsData?.feature_importance
     ? Math.max(...metricsData.feature_importance.map(f => f.importance))

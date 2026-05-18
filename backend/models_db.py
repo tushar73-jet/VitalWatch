@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, JSON, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, JSON, DateTime, ForeignKey, Text
 from database import Base
 import datetime
 
@@ -21,6 +21,7 @@ class PredictionLog(Base):
     spo2_val = Column(Float)
     risk_score = Column(Float)
     alert_level = Column(String)
+    features_json = Column(Text)
     was_correct = Column(Boolean, nullable=True)
 
 class ChatSession(Base):

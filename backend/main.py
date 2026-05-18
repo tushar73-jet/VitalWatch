@@ -1,11 +1,12 @@
 import os
 import uvicorn
 import logging
+import json
 from datetime import datetime
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -100,7 +101,7 @@ app.add_middleware(
 
 
 @app.post("/auth/token", response_model=dict)
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login_for_access_token(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -112,12 +113,34 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
     access_token = create_access_token(
         data={"sub": user.username, "role": user.role}, expires_delta=access_token_expires
     )
+    
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {access_token}",
+        httponly=True,
+        secure=False,  # Set to True in production with HTTPS
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    )
+    
     return {
-        "access_token": access_token, 
-        "token_type": "bearer",
+        "message": "Successfully authenticated",
         "role": user.role,
         "full_name": user.full_name
     }
+
+@app.get("/auth/me")
+def get_current_user_info(current_user: User = Depends(get_current_user)):
+    return {
+        "username": current_user.username,
+        "role": current_user.role,
+        "full_name": current_user.full_name
+    }
+
+@app.post("/auth/logout")
+def logout(response: Response):
+    response.delete_cookie("access_token")
+    return {"message": "Successfully logged out"}
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -151,6 +174,7 @@ def predict(vital_signs: VitalSigns, db: Session = Depends(get_db), current_user
                 spo2_val=vs_dict.get("SpO2_current"),
                 risk_score=risk_score,
                 alert_level=alert_level,
+                features_json=json.dumps(vs_dict)
             ))
             db.commit()
         except Exception as e:
@@ -184,6 +208,28 @@ def get_patient(case_id: int, current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail=f"Case {case_id} not found")
     return data
 
+@app.get("/patient/{case_id}/export")
+def export_patient_csv(case_id: int, current_user: User = Depends(get_current_user)):
+    if not prediction_engine:
+        raise HTTPException(status_code=500, detail="Engine not ready")
+    data = prediction_engine.get_patient_data(case_id)
+    if not data:
+        raise HTTPException(status_code=404, detail=f"Case {case_id} not found")
+    
+    if not data:
+        return Response(content="", media_type="text/csv")
+        
+    import io
+    import csv
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=data[0].keys())
+    writer.writeheader()
+    writer.writerows(data)
+    
+    response = Response(content=output.getvalue(), media_type="text/csv")
+    response.headers["Content-Disposition"] = f"attachment; filename=patient_case_{case_id}.csv"
+    return response
+
 
 @app.get("/analytics")
 def get_analytics(current_user: User = Depends(get_current_user)):
@@ -193,10 +239,10 @@ def get_analytics(current_user: User = Depends(get_current_user)):
 
 
 @app.get("/model/metrics")
-def get_model_metrics(current_user: User = Depends(get_current_user)):
+def get_model_metrics(threshold: float = 0.5, current_user: User = Depends(get_current_user)):
     if not prediction_engine:
         raise HTTPException(status_code=500, detail="Engine not ready")
-    metrics = prediction_engine.get_model_metrics()
+    metrics = prediction_engine.get_model_metrics(threshold)
     if metrics is None:
         raise HTTPException(status_code=503, detail="Model metrics unavailable — model or dataset not loaded")
     return metrics
@@ -216,7 +262,7 @@ def rag_query(req: RAGRequest, db: Session = Depends(get_db), current_user: User
 
     if db_available:
         try:
-            sess_id = "default-session"
+            sess_id = f"session-{current_user.username}"
             if not db.query(ChatSession).filter(ChatSession.session_id == sess_id).first():
                 db.add(ChatSession(session_id=sess_id))
                 db.commit()
