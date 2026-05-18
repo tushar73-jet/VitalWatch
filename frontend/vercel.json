@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://vitalwatch-backend.onrender.com/:path*"
+      "destination": "https://vitalwatch.onrender.com/:path*"
     },
     {
       "source": "/(.*)",
