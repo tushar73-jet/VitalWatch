@@ -25,47 +25,51 @@ from auth import (
 )
 from datetime import timedelta
 
+from predict import PredictionEngine
+from rag import RAGPipeline
+
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
 prediction_engine = None
 rag_pipeline = None
 db_available = False
+
 def get_lazy_prediction_engine():
     global prediction_engine
     if prediction_engine is None:
-        logging.info("Lazy loading PredictionEngine...")
-        try:
-            from predict import PredictionEngine
-            prediction_engine = PredictionEngine()
-            logging.info("✅ Prediction engine loaded (Lazy)")
-        except Exception as e:
-            logging.error(f"❌ PredictionEngine failed: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to initialize PredictionEngine: {e}")
+        raise HTTPException(status_code=500, detail="PredictionEngine not initialized.")
     return prediction_engine
 
 def get_lazy_rag_pipeline():
     global rag_pipeline
     if rag_pipeline is None:
-        logging.info("Lazy loading RAGPipeline...")
-        groq_key = os.environ.get("GROQ_API_KEY", "")
-        if groq_key and groq_key not in ("your_key_here", ""):
-            try:
-                from rag import RAGPipeline
-                rag_pipeline = RAGPipeline(groq_api_key=groq_key)
-                logging.info("✅ RAG pipeline ready (Lazy Groq)")
-            except Exception as e:
-                logging.error(f"❌ RAGPipeline failed: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to initialize RAGPipeline: {e}")
-        else:
-            logging.warning("⚠️  No GROQ_API_KEY — RAG chatbot disabled")
-            raise HTTPException(status_code=503, detail="RAG pipeline offline. Add GROQ_API_KEY to .env.")
+        raise HTTPException(status_code=503, detail="RAG pipeline offline. Add GROQ_API_KEY to .env.")
     return rag_pipeline
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global prediction_engine, rag_pipeline, db_available
     logging.info("🚀 Starting VitalWatch 2.0...")
+
+    # Initialize ML engines eagerly at startup (Hugging Face Spaces 16GB RAM)
+    try:
+        logging.info("Eagerly loading PredictionEngine...")
+        prediction_engine = PredictionEngine()
+        logging.info("✅ Prediction engine loaded (Eager)")
+    except Exception as e:
+        logging.error(f"❌ PredictionEngine failed: {e}")
+
+    try:
+        logging.info("Eagerly loading RAGPipeline...")
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+        if groq_key and groq_key not in ("your_key_here", ""):
+            rag_pipeline = RAGPipeline(groq_api_key=groq_key)
+            logging.info("✅ RAG pipeline ready (Eager Groq)")
+        else:
+            logging.warning("⚠️  No GROQ_API_KEY — RAG chatbot disabled")
+    except Exception as e:
+        logging.error(f"❌ RAGPipeline failed: {e}")
 
     db_available = test_connection()
     if db_available:

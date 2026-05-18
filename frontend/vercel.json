@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://vitalwatch.onrender.com/:path*"
+      "destination": "https://tushar73-jet-vitalwatch-backend.hf.space/:path*"
     },
     {
       "source": "/(.*)",
