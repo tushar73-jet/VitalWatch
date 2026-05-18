@@ -20,31 +20,31 @@ import logging
 import re
 from typing import Optional
 
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_groq import ChatGroq
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 class RAGPipeline:
-    def __init__(self, openai_api_key: Optional[str] = None):
-        if not openai_api_key:
-            raise ValueError("OpenAI API key is required to initialize RAGPipeline.")
+    def __init__(self, groq_api_key: Optional[str] = None):
+        if not groq_api_key:
+            raise ValueError("Groq API key is required to initialize RAGPipeline.")
 
-        self.api_key  = openai_api_key
+        self.api_key  = groq_api_key
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.index_path      = os.path.join(self.base_dir, "data", "faiss_index")
+        self.index_path      = os.path.join(self.base_dir, "data", "faiss_index_groq")
         self.guidelines_path = os.path.join(self.base_dir, "data", "guidelines")
 
         # LLM & embeddings
-        self.embeddings = OpenAIEmbeddings(
-            model="text-embedding-3-small",
-            openai_api_key=self.api_key,
+        self.embeddings = HuggingFaceEmbeddings(
+            model_name="all-MiniLM-L6-v2"
         )
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",
+        self.llm = ChatGroq(
+            model="llama-3.3-70b-versatile",
             temperature=0,
-            openai_api_key=self.api_key,
+            groq_api_key=self.api_key,
         )
 
         # Build the full document set (PDFs + hardcoded seeds)

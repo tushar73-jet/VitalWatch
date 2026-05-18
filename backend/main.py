@@ -74,15 +74,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logging.error(f"❌ PredictionEngine failed: {e}")
 
-    openai_key = os.environ.get("OPENAI_API_KEY", "")
-    if openai_key and openai_key not in ("your_key_here", ""):
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if groq_key and groq_key not in ("your_key_here", ""):
         try:
-            rag_pipeline = RAGPipeline(openai_api_key=openai_key)
-            logging.info("✅ RAG pipeline ready")
+            rag_pipeline = RAGPipeline(groq_api_key=groq_key)
+            logging.info("✅ RAG pipeline ready (Groq)")
         except Exception as e:
             logging.error(f"❌ RAGPipeline failed: {e}")
     else:
-        logging.warning("⚠️  No OPENAI_API_KEY — RAG chatbot disabled")
+        logging.warning("⚠️  No GROQ_API_KEY — RAG chatbot disabled")
 
     logging.info("✅ API docs: http://localhost:8000/docs")
     yield
@@ -253,7 +253,7 @@ def rag_query(req: RAGRequest, db: Session = Depends(get_db), current_user: User
     if not rag_pipeline:
         raise HTTPException(
             status_code=503,
-            detail="RAG pipeline offline. Add OPENAI_API_KEY to .env and restart.",
+            detail="RAG pipeline offline. Add GROQ_API_KEY to .env and restart.",
         )
 
     answer, sources, latency_ms = rag_pipeline.query(req.question, req.patient_context)
